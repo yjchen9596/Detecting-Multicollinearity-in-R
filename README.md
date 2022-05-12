@@ -7,4 +7,5 @@ Presentation is about milticoolinearity in multiple regression and how to detect
 Authors: 
 
 Yuka Chen - yjchen9596: yc8322a@student.american.edu
+
 Grady Keene: gk2307a@student.american.edu
