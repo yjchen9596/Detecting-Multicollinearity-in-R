@@ -1,0 +1,295 @@
+---
+title: "Detecting Multicollinearity in R"
+author: "Grady Keene, Yuka Chen"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+always_allow_html: yes
+---
+
+```{r klippy, echo=FALSE, include=TRUE}
+# install.packages("remotes")
+# remotes::install_github("rlesur/klippy")
+library(klippy)
+klippy::klippy()
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(broom)
+library(GGally)
+library(fastDummies)
+library(car)
+```
+
+```{r warning=FALSE}
+Houses <- read_table("https://users.stat.ufl.edu/~aa/smss/data/Houses.dat", 
+                     col_types = cols(X7 = col_skip()))
+names(Houses)[2] <- 'beds'
+glimpse(Houses)
+```
+
+# Correlation Pair Matrix
+
+```{r}
+ggpairs(Houses)
+```
+
+# Creating the Model With All Variables
+
+```{r}
+model <- lm(price ~ taxes + beds + baths + new + size, Houses)
+glance(model)
+tidy(model)
+```
+
+$\widehat{price} = 4525.75 + 38.13\cdot taxes - 11259.06\cdot beds - 2114.37\cdot baths + 41711.43\cdot new + 68.35\cdot size$
+
+
+```{r}
+
+new_model <- dummy_cols(Houses, select_columns = "new", remove_selected_columns = TRUE)
+dummy_model <- lm(price ~ taxes + beds + baths + new_1 + size, data = new_model)
+tidy(dummy_model)
+glancedummy <- glance(dummy_model)
+glancedummy
+```
+### Finding the VIF Values
+#### Calculating Taxes VIF 
+```{r}
+taxes <- lm(taxes ~ 1 + beds + baths + new_1 + size, data = new_model)
+taxes_g <- glance(taxes)
+taxes_g
+
+taxesvif <- 1/(1 - taxes_g[[1]])
+taxesvif
+```
+
+#### Calculating beds VIF 
+```{r}
+beds <- lm(beds ~ taxes + 1 + baths + new_1 + size, data = new_model)
+beds_g <- glance(beds)
+beds_g
+
+bedsvif <- 1/(1 - beds_g[[1]])
+bedsvif
+```
+
+#### Calculating baths VIF 
+
+```{r}
+baths <- lm(baths ~ taxes + beds + 1 + new_1 + size, data = new_model)
+baths_g <- glance(baths)
+baths_g
+
+bathsvif <- 1/(1 - baths_g[[1]])
+bathsvif
+```
+
+#### Calculating new_1 VIF 
+
+```{r}
+new_1 <- lm(new_1 ~ taxes + beds + baths + 1 + size, data = new_model)
+new_1_g <- glance(new_1)
+new_1_g
+
+new_1vif <- 1/(1 - new_1_g[[1]])
+new_1vif
+```
+
+#### Calculating size VIF 
+
+```{r}
+size <- lm(size ~ taxes + beds + baths + new_1 + 1, data = new_model)
+size_g <- glance(size)
+size_g
+
+sizevif <- 1/(1 - size_g[[1]])
+sizevif
+```
+
+#### We can use `vif()` function from `package {car}` to see all variables' VIF
+
+```{r message=FALSE, warning=FALSE}
+vif(dummy_model)
+```
+
+## Correlation Matrix
+
+```{r}
+x_vari <- new_model[,c("taxes", "beds", "new_1", "baths", "size")]
+cor(x_vari)
+```
+
+
+## Visualize Predictor VIFs
+
+```{r}
+vif_vals <- vif(dummy_model)
+barplot(vif_vals, main = "VIF Values", horiz = TRUE, col = "steelblue")
+abline(v = 2.5, lwd = 3, lty = 2)
+```
+
+
+### Without taxes, as taxes and size are highly correlated
+
+```{r}
+model_2 <- lm(price ~ beds + baths + new_1 + size, new_model)
+tidy(model_2)
+```
+
+## Original Model
+
+$\widehat{price} = 4525.75 + 38.13\cdot taxes - 11259.06\cdot beds - 2114.37\cdot baths + 41711.43\cdot new + 68.35\cdot size$
+
+## Model Without "taxes"
+
+$\widehat{price} = -28849.217 - 8202.38\cdot beds + 5273.78\cdot baths + 5273.77\cdot new + 118.12\cdot size$
+
+
+### Detecting Multicollinearity in R - Second Data Set
+
+
+The variables for this data set are violent crime rate (number of violent crimes per 100,000 population), murder rate, percent in metropolitan areas, percent white, percent high school graduates,percent below the poverty level, and percent of families headed by a single parent. The data are from StatisticalAbstract of the United States for 2005.
+
+
+
+```{r}
+Crime <- read_table("https://users.stat.ufl.edu/~aa/smss/data/Crime2.dat", 
+                    col_types = cols(X9 = col_skip()))
+glimpse(Crime)
+```
+
+# Correlation Pair Matrix
+
+```{r}
+ggpairs(Crime[2:8])
+```
+
+# Creating the Model With All Variables
+
+```{r}
+model2 <- lm(violent ~ murder + poverty + single + metro + white + highschool, Crime)
+glance(model2)
+tidy(model2)
+```
+
+$\widehat{violent} = -1143.8 + 19.33\cdot murder + 15\cdot poverty + 54.85\cdot single + 6.62\cdot metro - 0.70\cdot white + 4.79\cdot highschool$
+
+
+### Finding the Individual VIF Values
+#### Calculating murder VIF 
+
+```{r}
+murder <- lm(murder ~ 1 + poverty + single + metro + white + highschool, data = Crime)
+murder_g <- glance(murder)
+murder_g
+
+murdervif <- 1/(1 - murder_g[[1]])
+murdervif
+```
+
+#### Calculating poverty VIF 
+
+```{r}
+poverty <- lm(poverty ~ murder + 1 + single + metro + white + highschool, data = Crime)
+poverty_g <- glance(poverty)
+
+povertyvif <- 1/(1 - poverty_g[[1]])
+povertyvif
+```
+
+#### Calculating single VIF 
+
+```{r}
+single <- lm(single ~ murder + poverty + 1 + metro + white + highschool, data = Crime)
+single_g <- glance(single)
+
+singlevif <- 1/(1 - single_g[[1]])
+singlevif
+```
+
+#### Calculating metro VIF 
+
+```{r}
+metro <- lm(metro ~ murder + poverty + single + 1 + white + highschool, data = Crime)
+metro_g <- glance(metro)
+
+metrovif <- 1/(1 - metro_g[[1]])
+metrovif
+```
+
+#### Calculating white VIF 
+
+```{r}
+white <- lm(white ~ murder + poverty + single + metro + 1 + highschool, data = Crime)
+white_g <- glance(white)
+
+whitevif <- 1/(1 - white_g[[1]])
+whitevif
+```
+
+#### Calculating highschool VIF 
+
+
+```{r}
+highschool <- lm(highschool ~ murder + poverty + single + metro + white + 1, data = Crime)
+highschool_g <- glance(highschool)
+
+highschoolvif <- 1/(1 - highschool_g[[1]])
+highschoolvif
+```
+
+#### We can use `vif()` function from `package {car}` to see all variables' VIF
+
+```{r}
+vif(model2)
+```
+
+## Correlation Matrix
+
+```{r}
+x_vari2 <- Crime[ , c("murder", "poverty", "single", "metro", "white", "highschool")]
+cor(x_vari2)
+```
+
+## Visualize Predictor VIFs
+
+```{r}
+vif_vals2 <- vif(model2)
+barplot(vif_vals2, main = "VIF Values", horiz = TRUE, col = "steelblue")
+abline(v = 2.5, lwd = 3, lty = 2)
+```
+
+
+### Without murder, as murder, single, and white are highly correlated
+
+```{r}
+model2_1 <- lm(violent ~ poverty + single + metro + white + highschool, Crime)
+glance(model2_1)
+tidy(model2_1)
+```
+
+## With variable "murder"
+
+$\widehat{violent} = -1143.8 + 19.33\cdot murder + 15\cdot poverty + 54.85\cdot single + 6.62\cdot metro - 0.70\cdot white + 4.79\cdot highschool$
+
+## Without Variable "murder"
+
+$\widehat{violent} = -1795.9 + 26.2\cdot poverty + 109.5\cdot single + 7.6\cdot metro - 4.48\cdot white + 8.65\cdot highschool$
+
+## VIF Values of Model Without "murder"
+
+```{r}
+vif(model2_1)
+```
+
+
+
+
+
+
